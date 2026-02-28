@@ -24,6 +24,7 @@ export function setAdminSession(userId: string) {
   cookies().set(COOKIE_NAME, value, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
   });
 }
