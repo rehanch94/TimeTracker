@@ -30,10 +30,11 @@ export default async function Home() {
         <div className="text-center max-w-md">
           <h1 className="text-xl font-semibold text-slate-800">Unable to load</h1>
           <p className="mt-2 text-slate-600">
-            The database connection failed. If you just deployed, check that <code className="rounded bg-slate-200 px-1 text-sm">DATABASE_URL</code> is set in your hosting environment (e.g. Vercel or Netlify environment variables) and points to a running Supabase (or Postgres) instance. Use the <strong>Session pooler</strong> URL (port 6543) for serverless—see DEPLOYMENT.md.
+            The database connection failed. Ensure the Vercel project is connected to Supabase and see VERCEL_SUPABASE_SETUP.md for setup steps.
           </p>
           <p className="mt-4 text-sm text-slate-500">
-            See <a href="https://github.com/rehanch94/TimeTracker/blob/main/DEPLOYMENT.md" className="text-blue-600 underline">DEPLOYMENT.md</a> and <a href="https://github.com/rehanch94/TimeTracker/blob/main/VERCEL_SUPABASE_SETUP.md" className="text-blue-600 underline">VERCEL_SUPABASE_SETUP.md</a> for setup steps.
+            See <a href="https://github.com/rehanch94/TimeTracker/blob/main/VERCEL_SUPABASE_SETUP.md" className="text-blue-600 underline">VERCEL_SUPABASE_SETUP.md</a>.
+          </p>
           </p>
         </div>
       </main>
