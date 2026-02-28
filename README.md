@@ -73,3 +73,4 @@ The app can run on **Netlify** with **Supabase** as the database. Set `DATABASE_
 - **AuditLog:** `id`, `time_entry_id`, `edited_by_user_id`, `edited_at`, `previous_clock_in`, `previous_clock_out`
 
 Editing a time entry is done via the `editTimeEntry` server action (e.g. from a future admin screen); it always creates an `AuditLog` before updating the entry.
+# TimeTracker
