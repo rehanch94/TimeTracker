@@ -1,12 +1,28 @@
-# Deploying to Netlify with Supabase
+# Deploying with Supabase (Vercel or Netlify)
 
-The app is set up to deploy on **Netlify** with **Supabase** as the database. Push to your connected Git repo to trigger builds.
+The app uses **Supabase** (Postgres) as the database. Set `DATABASE_URL` (and `ADMIN_SESSION_SECRET`) in your host’s environment variables so the app can connect.
 
 ---
 
-## 1. Netlify environment variables
+## Vercel
 
-**If you use Netlify’s Supabase integration:** The integration sets `SUPABASE_DATABASE_URL` (and other Supabase vars). The app uses that as the database URL when `DATABASE_URL` is not set, so you don’t need to set `DATABASE_URL` yourself.
+1. **Vercel Dashboard** → your project → **Settings** → **Environment Variables**.
+2. Add **`DATABASE_URL`** and **`ADMIN_SESSION_SECRET`** (see “Getting `DATABASE_URL`” and table below).
+3. **Use the Session pooler URL** (recommended for Vercel serverless):
+   - Supabase → **Settings** → **Database** → **Connection string** → **URI**.
+   - Choose **Session** (pooler, port **6543**). It looks like:  
+     `postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`
+   - Replace `[YOUR-PASSWORD]` with your database password. Add `?sslmode=require` if needed.
+   - For Prisma on serverless, append: `?sslmode=require&connection_limit=1`
+4. Save and **Redeploy** (Deployments → … → Redeploy) so new env vars apply.
+
+If the Vercel–Supabase integration has already set `SUPABASE_DATABASE_URL`, the app will use that when `DATABASE_URL` is not set (see `src/lib/prisma.ts`). Otherwise you must set `DATABASE_URL` yourself.
+
+---
+
+## Netlify
+
+**If you use Netlify’s Supabase integration:** The integration may set `SUPABASE_DATABASE_URL`. The app uses that when `DATABASE_URL` is not set.
 
 **Otherwise**, in **Netlify Dashboard** → your site → **Site configuration** → **Environment variables**, add:
 
@@ -19,12 +35,11 @@ The app is set up to deploy on **Netlify** with **Supabase** as the database. Pu
 
 1. **Supabase Dashboard** → your project → **Settings** → **Database**.
 2. Under **Connection string**, choose **URI**.
-3. Use either:
-   - **Direct** (recommended for fewer connection issues):  
-     `postgresql://postgres:[YOUR-PASSWORD]@db.fxyditvfqtikuqphbmau.supabase.co:5432/postgres?sslmode=require`
-   - **Session pooler** (good for serverless): copy the **Session** URI and replace `[YOUR-PASSWORD]` with your database password.
-4. **For Netlify (serverless):** append `&connection_limit=1` to the URL so you don’t exhaust Supabase connections (e.g. `...?sslmode=require&connection_limit=1`).
-5. Paste the final URL into Netlify as `DATABASE_URL`.
+3. For **Vercel / serverless**: use the **Session** pooler (port **6543**). Example:  
+   `postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?sslmode=require&connection_limit=1`  
+   Replace `[YOUR-PASSWORD]` and ensure `[PROJECT-REF]` and `[REGION]` match your Supabase project.
+4. For **Netlify (serverless):** use the Session pooler or direct URL and append `&connection_limit=1` (e.g. `...?sslmode=require&connection_limit=1`).
+5. Paste the final URL as `DATABASE_URL` in your host’s environment variables.
 
 ### Optional (if you use Supabase features later)
 

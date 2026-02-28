@@ -6,7 +6,7 @@ Use this when you want the app to use Supabase as the database instead of local 
 
 ## 1. Get your Supabase connection string
 
-1. Open [Supabase Dashboard](https://supabase.com/dashboard) → your project (**fxyditvfqtikuqphbmau**).
+1. Open [Supabase Dashboard](https://supabase.com/dashboard) → your project.
 2. Go to **Settings** (gear) → **Database**.
 3. Under **Connection string**, choose **URI**.
 4. Copy the connection string. It looks like:
@@ -19,10 +19,9 @@ Use this when you want the app to use Supabase as the database instead of local 
    ```
 5. Replace `[YOUR-PASSWORD]` with your **database password** (the one you set when creating the project). If you forgot it, use **Reset database password** on the same page.
 
-**Your project ref:** `fxyditvfqtikuqphbmau`  
-So the direct URL will look like:
+Replace `[PROJECT-REF]` with your project reference (find it in the Supabase Dashboard URL or in Settings → General). The direct URL looks like:
 ```text
-postgresql://postgres:YOUR_PASSWORD@db.fxyditvfqtikuqphbmau.supabase.co:5432/postgres
+postgresql://postgres:YOUR_PASSWORD@db.[PROJECT-REF].supabase.co:5432/postgres
 ```
 If you get SSL errors, add `?sslmode=require` at the end of the URL.
 
@@ -38,7 +37,7 @@ In your project root, edit **`.env`** (create it from `.env.example` if needed):
    ```
 2. **Set** `DATABASE_URL` to your Supabase connection string (use the one with your real password):
    ```env
-   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.fxyditvfqtikuqphbmau.supabase.co:5432/postgres"
+   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.[PROJECT-REF].supabase.co:5432/postgres"
    ```
    Keep your other vars (`ADMIN_SESSION_SECRET`, Supabase anon/secret keys if you use them).
 
@@ -110,7 +109,7 @@ Open the app (e.g. http://localhost:3000). Log in to admin with PIN **1234**. Th
 - **SSL**  
   - Supabase uses SSL. If you see SSL errors, add `?sslmode=require` to the end of `DATABASE_URL`:
     ```text
-    postgresql://postgres:YOUR_PASSWORD@db.fxyditvfqtikuqphbmau.supabase.co:5432/postgres?sslmode=require
+    postgresql://postgres:YOUR_PASSWORD@db.[PROJECT-REF].supabase.co:5432/postgres?sslmode=require
     ```
     Prisma usually handles Supabase SSL by default.
 
