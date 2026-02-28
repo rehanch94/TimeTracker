@@ -4,6 +4,8 @@ import { getWeekStartDay, getSchedules } from "./actions";
 import { getWeekBoundsUtc } from "@/lib/week";
 import AdminClient from "./AdminClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminPage() {
   const admin = await requireAdmin();
 
@@ -16,22 +18,31 @@ export default async function AdminPage() {
 
   const { start: weekStart, end: weekEnd } = getWeekBoundsUtc(weekStartDay);
 
-  let users: Awaited<ReturnType<typeof prisma.user.findMany>> = [];
-  let entries: Awaited<ReturnType<typeof prisma.timeEntry.findMany>> = [];
-  let audits: Awaited<ReturnType<typeof prisma.auditLog.findMany>> = [];
-  let weekEntries: Awaited<ReturnType<typeof prisma.timeEntry.findMany>> = [];
+  let users: Awaited<ReturnType<typeof prisma.user.findMany>>;
+  let entries: Awaited<ReturnType<typeof prisma.timeEntry.findMany>>;
+  let audits: Awaited<ReturnType<typeof prisma.auditLog.findMany>>;
+  let weekEntries: Array<{
+    id: string;
+    user_id: string;
+    clock_in_time: Date;
+    clock_out_time: Date | null;
+    total_hours: number | null;
+    is_edited: boolean;
+    user: { id: string; name: string };
+  }>;
 
   try {
-    [users, entries, audits, weekEntries] = await Promise.all([
+    const result = await Promise.all([
       prisma.user.findMany({
         orderBy: [{ role: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, role: true, is_active: true, pin_code: true },
+        select: { id: true, name: true, role: true, is_active: true, pin_code: true, createdAt: true, updatedAt: true },
       }),
       prisma.timeEntry.findMany({
         orderBy: { clock_in_time: "desc" },
         take: 500,
         select: {
           id: true,
+          user_id: true,
           clock_in_time: true,
           clock_out_time: true,
           total_hours: true,
@@ -45,6 +56,7 @@ export default async function AdminPage() {
         select: {
           id: true,
           time_entry_id: true,
+          edited_by_user_id: true,
           edited_at: true,
           previous_clock_in: true,
           previous_clock_out: true,
@@ -57,13 +69,20 @@ export default async function AdminPage() {
           clock_out_time: { not: null },
         },
         select: {
+          id: true,
           user_id: true,
           clock_in_time: true,
+          clock_out_time: true,
           total_hours: true,
+          is_edited: true,
           user: { select: { id: true, name: true } },
         },
       }),
     ]);
+    users = result[0];
+    entries = result[1];
+    audits = result[2];
+    weekEntries = result[3];
   } catch (err) {
     console.error("Admin page data load failed:", err);
     return (
@@ -112,7 +131,7 @@ export default async function AdminPage() {
   }
   const scheduleByUser = new Map(schedules.map((s) => [s.userId, s]));
   const allUserIds = new Set([
-    ...weeklyTotalsMap.keys(),
+    ...Array.from(weeklyTotalsMap.keys()),
     ...schedules.map((s) => s.userId),
   ]);
   const weeklyTotals = Array.from(allUserIds)
@@ -145,17 +164,30 @@ export default async function AdminPage() {
       weeklyTotals={weeklyTotals}
       weekStartIso={weekStart.toISOString()}
       weekEndIso={weekEnd.toISOString()}
-      entries={entries.map((e) => ({
-        ...e,
-        clock_in_time: e.clock_in_time.toISOString(),
-        clock_out_time: e.clock_out_time ? e.clock_out_time.toISOString() : null,
-      }))}
-      audits={audits.map((a) => ({
-        ...a,
-        edited_at: a.edited_at.toISOString(),
-        previous_clock_in: a.previous_clock_in.toISOString(),
-        previous_clock_out: a.previous_clock_out ? a.previous_clock_out.toISOString() : null,
-      }))}
+      entries={entries.map((e) => {
+        const u = users.find((u) => u.id === e.user_id);
+        return {
+          id: e.id,
+          user_id: e.user_id,
+          total_hours: e.total_hours,
+          is_edited: e.is_edited,
+          user: { id: e.user_id, name: u?.name ?? "—" },
+          clock_in_time: e.clock_in_time.toISOString(),
+          clock_out_time: e.clock_out_time ? e.clock_out_time.toISOString() : null,
+        };
+      })}
+      audits={audits.map((a) => {
+        const editor = users.find((u) => u.id === a.edited_by_user_id);
+        return {
+          id: a.id,
+          time_entry_id: a.time_entry_id,
+          edited_by_user_id: a.edited_by_user_id,
+          edited_by_user: { id: a.edited_by_user_id, name: editor?.name ?? "—" },
+          edited_at: a.edited_at.toISOString(),
+          previous_clock_in: a.previous_clock_in.toISOString(),
+          previous_clock_out: a.previous_clock_out ? a.previous_clock_out.toISOString() : null,
+        };
+      })}
     />
   );
 }

@@ -1,0 +1,11 @@
+# Netlify build config (Next.js + Supabase)
+# Set env vars in Netlify: Site settings → Environment variables
+
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Next.js on Netlify uses the framework plugin automatically when detected.
+# No need to set functions directory; Next.js handles serverless functions.

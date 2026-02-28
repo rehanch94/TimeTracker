@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import ClockClient from "./ClockClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const [users, activeEntries] = await Promise.all([
     prisma.user.findMany({

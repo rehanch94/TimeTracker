@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { clearAdminSession, requireAdmin, setAdminSession } from "@/lib/adminAuth";
-import { saveDatabaseToSql, SQL_EXPORT_RELATIVE } from "@/lib/dbExport";
+import { saveDatabaseToSql, SQL_EXPORT_RELATIVE, isPostgres } from "@/lib/dbExport";
 import { revalidatePath } from "next/cache";
 
 export async function adminLogin(pinCode: string) {
@@ -79,10 +79,11 @@ export async function updateUserPin(userId: string, newPin: string) {
   return { success: true, error: null };
 }
 
-/** Updates exports/timetracking.sql with current DB state. Also runs after every clock in/out. */
+/** Updates exports/timetracking.sql with current DB state (SQLite only). No-op on Supabase/Postgres. */
 export async function updateDatabaseSql() {
   await requireAdmin();
   await saveDatabaseToSql(prisma);
+  if (isPostgres()) return { success: true, file: null as string | null };
   return { success: true, file: SQL_EXPORT_RELATIVE };
 }
 

@@ -179,7 +179,7 @@ export default function AdminClient({
                 startTransition(async () => {
                   setMsg(null);
                   const res = await updateDatabaseSql();
-                  if (res.success) setMsg({ type: "success", text: `Updated ${res.file}` });
+                  if (res.success) setMsg({ type: "success", text: res.file ? `Updated ${res.file}` : "Using Supabase — .sql export is only for SQLite." });
                   else setMsg({ type: "error", text: "Update failed" });
                 })
               }

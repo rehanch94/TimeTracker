@@ -15,11 +15,19 @@ function sqlValue(v: unknown): string {
   return `'${s.replaceAll("'", "''")}'`;
 }
 
+/** True when using Postgres (e.g. Supabase); SQL file export is skipped. */
+export function isPostgres(): boolean {
+  const url = process.env.DATABASE_URL ?? "";
+  return url.startsWith("postgresql://") || url.startsWith("postgres://");
+}
+
 /**
- * Writes full database dump to exports/timetracking.sql.
- * Safe to call from clock actions (no admin check). Used for autosave and manual Update.
+ * Writes full database dump to exports/timetracking.sql (SQLite only).
+ * No-op when using Postgres/Supabase. Safe to call from clock actions (no admin check).
  */
 export async function saveDatabaseToSql(prisma: PrismaClient): Promise<void> {
+  if (isPostgres()) return;
+
   const tables = (
     await prisma.$queryRawUnsafe<{ name: string }[]>(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"

@@ -18,7 +18,7 @@ async function getActiveUserForPin(userId: string, pinCode: string) {
   if (!user) return { user: null as null, error: "User not found" as const };
   if (!user.is_active) return { user: null as null, error: "User is disabled" as const };
   if (user.pin_code !== pinCode) return { user: null as null, error: "Invalid PIN" as const };
-  return { user, error: null as const };
+  return { user, error: null };
 }
 
 /**

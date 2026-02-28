@@ -4,6 +4,8 @@ import { getWeekStartDay, getSchedules } from "../actions";
 import { WEEKDAY_NAMES } from "@/lib/week";
 import SettingsClient from "./SettingsClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminSettingsPage() {
   await requireAdmin();
 

@@ -1,6 +1,6 @@
-# Time Tracking (Local)
+# Time Tracking
 
-A local time-tracking web app inspired by Square Team Management. Built with **Next.js (App Router)**, **Tailwind CSS**, **Prisma**, and **SQLite**.
+A time-tracking web app inspired by Square Team Management. Built with **Next.js (App Router)**, **Tailwind CSS**, **Prisma**, and **SQLite** or **Supabase (PostgreSQL)**.
 
 ## Business rules
 
@@ -53,6 +53,10 @@ On the home page, **select your employee name first**, then **confirm with your 
   - Add employees
   - View time-entry history + audit history
   - Export a local SQL dump file to `exports/` inside the project
+
+## Deploying (Netlify + Supabase)
+
+The app can run on **Netlify** with **Supabase** as the database. Set `DATABASE_URL` (and optionally `ADMIN_SESSION_SECRET`) in Netlify’s environment variables and push to your connected Git repo. See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for env vars and steps.
 
 ## Scripts
 
