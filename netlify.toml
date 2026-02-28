@@ -5,7 +5,7 @@
   command = "npm run build"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "18"
 
 # Next.js on Netlify uses the framework plugin automatically when detected.
 # No need to set functions directory; Next.js handles serverless functions.
