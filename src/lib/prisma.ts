@@ -8,4 +8,5 @@ export const prisma =
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Reuse one client in serverless (Netlify) to avoid "too many connections"
+globalForPrisma.prisma = prisma;

@@ -21,7 +21,8 @@ In **Netlify Dashboard** → your site → **Site configuration** → **Environm
    - **Direct** (recommended for fewer connection issues):  
      `postgresql://postgres:[YOUR-PASSWORD]@db.fxyditvfqtikuqphbmau.supabase.co:5432/postgres?sslmode=require`
    - **Session pooler** (good for serverless): copy the **Session** URI and replace `[YOUR-PASSWORD]` with your database password.
-4. Paste the final URL into Netlify as `DATABASE_URL`.
+4. **For Netlify (serverless):** append `&connection_limit=1` to the URL so you don’t exhaust Supabase connections (e.g. `...?sslmode=require&connection_limit=1`).
+5. Paste the final URL into Netlify as `DATABASE_URL`.
 
 ### Optional (if you use Supabase features later)
 
