@@ -35,7 +35,6 @@ export default async function Home() {
           <p className="mt-4 text-sm text-slate-500">
             See <a href="https://github.com/rehanch94/TimeTracker/blob/main/VERCEL_SUPABASE_SETUP.md" className="text-blue-600 underline">VERCEL_SUPABASE_SETUP.md</a>.
           </p>
-          </p>
         </div>
       </main>
     );
