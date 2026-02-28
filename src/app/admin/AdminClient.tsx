@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createEmployee, updateDatabaseSql, toggleUserActive, updateUserPin, adminLogout } from "./actions";
+import { createEmployee, updateDatabaseSql, toggleUserActive, updateUserPin, updateEmployee, deleteEmployee, adminLogout } from "./actions";
 import { editTimeEntry } from "@/app/actions/clock";
 
-type UserRow = { id: string; name: string; role: string; is_active: boolean; pin_code: string };
+type UserRow = { id: string; name: string; role: string; is_active: boolean; pin_code: string; hourly_pay?: number | null };
 type WeeklyTotal = {
   userId: string;
   userName: string;
@@ -14,6 +14,8 @@ type WeeklyTotal = {
   scheduledTotal: number;
   actualByDay: number[];
   scheduledByDay: number[];
+  hourlyPay?: number | null;
+  totalCost?: number | null;
 };
 type TimeEntryRow = {
   id: string;
@@ -67,6 +69,9 @@ export default function AdminClient({
   weeklyTotals,
   weekStartIso,
   weekEndIso,
+  weekEntries = [],
+  emailReportTo = "",
+  emailReportBody = "",
 }: {
   adminId: string;
   adminName: string;
@@ -77,8 +82,13 @@ export default function AdminClient({
   weeklyTotals: WeeklyTotal[];
   weekStartIso: string;
   weekEndIso: string;
+  weekEntries?: TimeEntryRow[];
+  emailReportTo?: string;
+  emailReportBody?: string;
 }) {
   const router = useRouter();
+  type TabId = "overview" | "employees" | "entries" | "audit";
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [filterUserId, setFilterUserId] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -90,6 +100,10 @@ export default function AdminClient({
   const [showInactive, setShowInactive] = useState(false);
   const [editingPinForId, setEditingPinForId] = useState<string | null>(null);
   const [editPinValue, setEditPinValue] = useState("");
+  const [editingEmployee, setEditingEmployee] = useState<UserRow | null>(null);
+  const [editEmployeeName, setEditEmployeeName] = useState("");
+  const [editEmployeePin, setEditEmployeePin] = useState("");
+  const [editEmployeeHourlyPay, setEditEmployeeHourlyPay] = useState<string>("");
 
   const [editingEntry, setEditingEntry] = useState<TimeEntryRow | null>(null);
   const [editClockIn, setEditClockIn] = useState("");
@@ -150,18 +164,27 @@ export default function AdminClient({
 
   const emailReportHref = useMemo(() => {
     const subject = encodeURIComponent("Weekly Timesheet");
-    const lines = [
-      "Weekly timesheet summary",
+    const summaryLines = [
       "",
       `Week (${WEEKDAY_NAMES[weekStartDay]} start): ${weekRangeLabel}`,
       "",
-      ...weeklyTotals.map((r) => `${r.userName}: ${r.totalHours.toFixed(2)} hours`),
+      ...weeklyTotals.map((r) => {
+        const line =
+          r.totalCost != null
+            ? `${r.userName}: ${r.totalHours.toFixed(2)} hours — $${r.totalCost.toFixed(2)}`
+            : `${r.userName}: ${r.totalHours.toFixed(2)} hours`;
+        return line;
+      }),
       "",
       "— Time Tracking",
     ];
-    const body = encodeURIComponent(lines.join("\n"));
-    return `mailto:test@rehanch.com?subject=${subject}&body=${body}`;
-  }, [weekStartDay, weekRangeLabel, weeklyTotals]);
+    const customBody = (emailReportBody ?? "").trim();
+    const bodyText = customBody ? customBody + "\n\n" + summaryLines.join("\n") : "Weekly timesheet summary" + summaryLines.join("\n");
+    const body = encodeURIComponent(bodyText);
+    const to = (emailReportTo ?? "").trim();
+    const mailto = to ? `mailto:${encodeURIComponent(to)}` : "mailto:";
+    return `${mailto}?subject=${subject}&body=${body}`;
+  }, [weekStartDay, weekRangeLabel, weeklyTotals, emailReportTo, emailReportBody]);
 
   return (
     <main className="min-h-screen p-6 bg-slate-50">
@@ -214,6 +237,31 @@ export default function AdminClient({
           </p>
         )}
 
+        <nav className="relative z-10 flex gap-1 border-b border-slate-200 bg-slate-50 -mx-1 px-1" aria-label="Admin sections">
+          {(
+            [
+              { id: "overview" as TabId, label: "Overview" },
+              { id: "employees" as TabId, label: "Employees" },
+              { id: "entries" as TabId, label: "Entries" },
+              { id: "audit" as TabId, label: "Audit" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`cursor-pointer px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? "border-slate-900 text-slate-900 bg-white"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="relative z-0">
         {editingEntry && (
           <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
@@ -289,6 +337,8 @@ export default function AdminClient({
           </div>
         )}
 
+        {activeTab === "overview" && (
+        <>
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -316,6 +366,7 @@ export default function AdminClient({
                   ))}
                   <th className="py-2 pl-2 font-medium text-right tabular-nums">Total</th>
                   <th className="py-2 pl-2 font-medium text-right tabular-nums">Scheduled</th>
+                  <th className="py-2 pl-2 font-medium text-right tabular-nums">Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -348,12 +399,15 @@ export default function AdminClient({
                       <td className="py-2 pl-2 text-right tabular-nums text-slate-600">
                         {r.scheduledTotal > 0 ? r.scheduledTotal.toFixed(2) : "—"}
                       </td>
+                      <td className="py-2 pl-2 text-right tabular-nums text-slate-700">
+                        {r.totalCost != null ? `$${r.totalCost.toFixed(2)}` : "—"}
+                      </td>
                     </tr>
                   );
                 })}
                 {weeklyTotals.length === 0 && (
                   <tr>
-                    <td className="py-4 text-slate-500" colSpan={10}>
+                    <td className="py-4 text-slate-500" colSpan={11}>
                       No entries this week.
                     </td>
                   </tr>
@@ -363,6 +417,54 @@ export default function AdminClient({
           </div>
         </section>
 
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mt-6">
+            <h3 className="text-base font-semibold text-slate-800">This week&apos;s time entries</h3>
+            <p className="mt-1 text-sm text-slate-500">Completed shifts for the current week (newest first).</p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200">
+                    <th className="py-2 pr-4 font-medium">Employee</th>
+                    <th className="py-2 pr-4 font-medium">Clock in</th>
+                    <th className="py-2 pr-4 font-medium">Clock out</th>
+                    <th className="py-2 pr-4 font-medium">Hours</th>
+                    <th className="py-2 pr-4 font-medium">Edited</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(weekEntries ?? [])
+                    .map((e) => (
+                      <tr key={e.id} className="text-slate-800">
+                        <td className="py-2 pr-4 whitespace-nowrap">{e.user.name}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_in_time)}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_out_time)}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap tabular-nums">
+                          {e.total_hours == null ? "—" : e.total_hours.toFixed(2)}
+                        </td>
+                        <td className="py-2 pr-4 whitespace-nowrap">
+                          {e.is_edited ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 text-xs">Edited</span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  {(weekEntries ?? []).length === 0 && (
+                    <tr>
+                      <td className="py-4 text-slate-500" colSpan={5}>
+                        No time entries this week yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+        )}
+
+        {activeTab === "employees" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-800">Employees</h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -474,22 +576,55 @@ export default function AdminClient({
                         </>
                       )}
                     </div>
-                    {editingPinForId !== u.id && (
+                    <div className="flex items-center gap-2">
                       <button
+                        type="button"
+                        onClick={() => {
+                          setEditingEmployee(u);
+                          setEditEmployeeName(u.name);
+                          setEditEmployeePin(u.pin_code);
+                          setEditEmployeeHourlyPay(u.hourly_pay != null ? String(u.hourly_pay) : "");
+                        }}
+                        disabled={isPending}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
                         disabled={isPending}
                         onClick={() =>
                           startTransition(async () => {
+                            if (!confirm(`Remove ${u.name}? Their time entries and schedule will be deleted.`)) return;
                             setMsg(null);
-                            const res = await toggleUserActive(u.id);
-                            if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
-                            else router.refresh();
+                            const res = await deleteEmployee(u.id);
+                            if (res.success) {
+                              setMsg({ type: "success", text: "Employee removed." });
+                              router.refresh();
+                            } else setMsg({ type: "error", text: res.error ?? "Failed to remove." });
                           })
                         }
-                        className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none"
+                        className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                       >
-                        Disable
+                        Remove
                       </button>
-                    )}
+                      {editingPinForId !== u.id && (
+                        <button
+                          disabled={isPending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              setMsg(null);
+                              const res = await toggleUserActive(u.id);
+                              if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
+                              else router.refresh();
+                            })
+                          }
+                          className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none"
+                        >
+                          Disable
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -564,22 +699,55 @@ export default function AdminClient({
                               </>
                             )}
                           </div>
-                          {editingPinForId !== u.id && (
+                          <div className="flex items-center gap-2">
                             <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEmployee(u);
+                                setEditEmployeeName(u.name);
+                                setEditEmployeePin(u.pin_code);
+                                setEditEmployeeHourlyPay(u.hourly_pay != null ? String(u.hourly_pay) : "");
+                              }}
+                              disabled={isPending}
+                              className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
                               disabled={isPending}
                               onClick={() =>
                                 startTransition(async () => {
+                                  if (!confirm(`Remove ${u.name}? Their time entries and schedule will be deleted.`)) return;
                                   setMsg(null);
-                                  const res = await toggleUserActive(u.id);
-                                  if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
-                                  else router.refresh();
+                                  const res = await deleteEmployee(u.id);
+                                  if (res.success) {
+                                    setMsg({ type: "success", text: "Employee removed." });
+                                    router.refresh();
+                                  } else setMsg({ type: "error", text: res.error ?? "Failed to remove." });
                                 })
                               }
-                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none"
+                              className="rounded border border-rose-300 bg-white px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                             >
-                              Enable
+                              Remove
                             </button>
-                          )}
+                            {editingPinForId !== u.id && (
+                              <button
+                                disabled={isPending}
+                                onClick={() =>
+                                  startTransition(async () => {
+                                    setMsg(null);
+                                    const res = await toggleUserActive(u.id);
+                                    if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
+                                    else router.refresh();
+                                  })
+                                }
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none"
+                              >
+                                Enable
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -589,7 +757,94 @@ export default function AdminClient({
             )}
           </div>
         </section>
+        )}
 
+        {editingEmployee && (
+          <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-800">Edit employee</h3>
+              <p className="mt-1 text-sm text-slate-500">{editingEmployee.name}</p>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600">Name</label>
+                  <input
+                    type="text"
+                    value={editEmployeeName}
+                    onChange={(e) => setEditEmployeeName(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600">PIN (4–8 digits)</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={editEmployeePin}
+                    onChange={(e) => setEditEmployeePin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600">Hourly pay ($)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="Optional"
+                    value={editEmployeeHourlyPay}
+                    onChange={(e) => setEditEmployeeHourlyPay(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingEmployee(null);
+                    setEditEmployeeName("");
+                    setEditEmployeePin("");
+                    setEditEmployeeHourlyPay("");
+                  }}
+                  className="flex-1 rounded-lg border border-slate-300 py-2.5 font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending || !editEmployeeName.trim() || editEmployeePin.length < 4}
+                  onClick={() =>
+                    startTransition(async () => {
+                      setMsg(null);
+                      const raw = editEmployeeHourlyPay.trim();
+                      const hourlyPayParam = raw === "" ? null : (() => {
+                        const n = Number(raw);
+                        return Number.isFinite(n) && n >= 0 ? n : null;
+                      })();
+                      const res = await updateEmployee(editingEmployee.id, editEmployeeName.trim(), editEmployeePin, hourlyPayParam);
+                      if (res.success) {
+                        setMsg({ type: "success", text: "Employee updated." });
+                        setEditingEmployee(null);
+                        setEditEmployeeName("");
+                        setEditEmployeePin("");
+                        setEditEmployeeHourlyPay("");
+                        router.refresh();
+                      } else {
+                        setMsg({ type: "error", text: res.error ?? "Update failed." });
+                      }
+                    })
+                  }
+                  className="flex-1 rounded-lg bg-slate-900 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {isPending ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "entries" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -692,7 +947,9 @@ export default function AdminClient({
             </table>
           </div>
         </section>
+        )}
 
+        {activeTab === "audit" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-800">Audit Log</h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -731,6 +988,8 @@ export default function AdminClient({
             </table>
           </div>
         </section>
+        )}
+        </div>
       </div>
     </main>
   );

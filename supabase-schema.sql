@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS "User" (
   "role"        TEXT NOT NULL DEFAULT 'EMPLOYEE',
   "pin_code"    TEXT NOT NULL,
   "is_active"  BOOLEAN NOT NULL DEFAULT true,
+  "hourly_pay" DOUBLE PRECISION,
   "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT now(),
   "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -93,3 +94,6 @@ DROP TRIGGER IF EXISTS "User_updatedAt" ON "User";
 CREATE TRIGGER "User_updatedAt"
   BEFORE UPDATE ON "User"
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- If you already have the User table, add hourly_pay with:
+-- ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "hourly_pay" DOUBLE PRECISION;

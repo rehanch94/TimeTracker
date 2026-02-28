@@ -11,14 +11,15 @@ datasource db {
 }
 
 model User {
-  id        String     @id @default(cuid())
-  name      String
+  id         String     @id @default(cuid())
+  name       String
   // SQLite doesn't support Prisma enums; store as string ("ADMIN" | "EMPLOYEE")
-  role      String     @default("EMPLOYEE")
-  pin_code  String     // For clock in/out; multiple employees may share a PIN
-  is_active Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  role       String     @default("EMPLOYEE")
+  pin_code   String     // For clock in/out; multiple employees may share a PIN
+  is_active  Boolean    @default(true)
+  hourly_pay Float?     // Hourly rate for cost calculation (null = not set)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   timeEntries TimeEntry[]
   auditLogs   AuditLog[] @relation("EditedByUser")

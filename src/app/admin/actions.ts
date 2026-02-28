@@ -79,6 +79,56 @@ export async function updateUserPin(userId: string, newPin: string) {
   return { success: true, error: null };
 }
 
+/** Update employee name, PIN, and/or hourly pay. */
+export async function updateEmployee(
+  userId: string,
+  name: string,
+  pinCode: string,
+  hourlyPay?: number | null | string
+) {
+  await requireAdmin();
+
+  const trimmedName = name.trim();
+  const trimmedPin = pinCode.trim();
+  if (!trimmedName) return { success: false, error: "Name is required" };
+  if (!/^\d{4,8}$/.test(trimmedPin)) return { success: false, error: "PIN must be 4-8 digits" };
+  const hasHourlyPay = hourlyPay !== undefined && hourlyPay !== null && hourlyPay !== "";
+  if (hasHourlyPay) {
+    const n = Number(hourlyPay);
+    if (n < 0 || !Number.isFinite(n)) return { success: false, error: "Hourly pay must be a non-negative number" };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { success: false, error: "User not found" };
+  if (user.role === "ADMIN") return { success: false, error: "Cannot edit admin here" };
+
+  const hourlyPayValue = hourlyPay === undefined ? undefined : (hourlyPay === null || hourlyPay === "" ? null : Number(hourlyPay));
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      name: trimmedName,
+      pin_code: trimmedPin,
+      ...(hourlyPayValue !== undefined ? { hourly_pay: hourlyPayValue } : {}),
+    },
+  });
+
+  revalidatePath("/admin");
+  return { success: true, error: null };
+}
+
+/** Delete employee. Time entries and schedule are removed (cascade). */
+export async function deleteEmployee(userId: string) {
+  await requireAdmin();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { success: false, error: "User not found" };
+  if (user.role === "ADMIN") return { success: false, error: "Cannot delete admin user" };
+
+  await prisma.user.delete({ where: { id: userId } });
+  revalidatePath("/admin");
+  return { success: true, error: null };
+}
+
 /** Updates exports/timetracking.sql with current DB state (SQLite only). No-op on Supabase/Postgres. */
 export async function updateDatabaseSql() {
   await requireAdmin();
@@ -189,6 +239,57 @@ export async function setSchedules(updates: { userId: string; dayOfWeek: number;
       update: { hours: value },
     });
   }
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  return { success: true, error: null };
+}
+
+const EMAIL_REPORT_TO_KEY = "email_report_to";
+const EMAIL_REPORT_BODY_KEY = "email_report_body";
+
+export async function getEmailReportTo(): Promise<string> {
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: EMAIL_REPORT_TO_KEY } });
+    return row?.value?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function getEmailReportBody(): Promise<string> {
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: EMAIL_REPORT_BODY_KEY } });
+    return row?.value ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function setEmailReportTo(value: string) {
+  await requireAdmin();
+  const v = value?.trim() ?? "";
+  if (!v) {
+    await prisma.setting.deleteMany({ where: { key: EMAIL_REPORT_TO_KEY } }).catch(() => {});
+  } else {
+    await prisma.setting.upsert({
+      where: { key: EMAIL_REPORT_TO_KEY },
+      create: { key: EMAIL_REPORT_TO_KEY, value: v },
+      update: { value: v },
+    });
+  }
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  return { success: true, error: null };
+}
+
+export async function setEmailReportBody(value: string) {
+  await requireAdmin();
+  const v = value ?? "";
+  await prisma.setting.upsert({
+    where: { key: EMAIL_REPORT_BODY_KEY },
+    create: { key: EMAIL_REPORT_BODY_KEY, value: v },
+    update: { value: v },
+  });
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   return { success: true, error: null };

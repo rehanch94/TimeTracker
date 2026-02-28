@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { setWeekStartDay, setSchedules, setTimezone } from "../actions";
+import { setWeekStartDay, setSchedules, setTimezone, setEmailReportTo, setEmailReportBody } from "../actions";
 
 type ScheduleRow = { userId: string; userName: string; byDay: number[] };
 
@@ -24,18 +24,26 @@ export default function SettingsClient({
   schedules = [],
   dayLabels = DEFAULT_DAY_LABELS,
   timezone = "",
+  emailReportTo: initialEmailTo = "",
+  emailReportBody: initialEmailBody = "",
 }: {
   weekStartDay: number;
   weekDayOptions: { value: number; label: string }[];
   schedules: ScheduleRow[];
   dayLabels: string[];
   timezone?: string;
+  emailReportTo?: string;
+  emailReportBody?: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState(weekStartDay);
   const [tz, setTz] = useState(timezone);
+  const [emailTo, setEmailTo] = useState(initialEmailTo);
+  const [emailBody, setEmailBody] = useState(initialEmailBody);
   useEffect(() => setSelected(weekStartDay), [weekStartDay]);
   useEffect(() => setTz(timezone), [timezone]);
+  useEffect(() => setEmailTo(initialEmailTo), [initialEmailTo]);
+  useEffect(() => setEmailBody(initialEmailBody), [initialEmailBody]);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -121,6 +129,54 @@ export default function SettingsClient({
                   setMsg({ type: "success", text: "Saved." });
                   router.refresh();
                 } else setMsg({ type: "error", text: res.error ?? "Failed" });
+              })
+            }
+            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            Save
+          </button>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-800">Email report</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Default &quot;To&quot; and optional custom body for the weekly email report link. The current week summary (employee hours and cost) is always appended at the bottom.
+          </p>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600">Send to (email)</label>
+              <input
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="e.g. manager@example.com"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600">Email body (optional)</label>
+              <textarea
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                placeholder="Add any custom intro text. Week summary will be appended below."
+                rows={4}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              />
+            </div>
+          </div>
+          <button
+            disabled={isPending || (emailTo === initialEmailTo && emailBody === initialEmailBody)}
+            onClick={() =>
+              startTransition(async () => {
+                setMsg(null);
+                const [resTo, resBody] = await Promise.all([
+                  setEmailReportTo(emailTo),
+                  setEmailReportBody(emailBody),
+                ]);
+                if (resTo?.success && resBody?.success) {
+                  setMsg({ type: "success", text: "Email report settings saved." });
+                  router.refresh();
+                } else setMsg({ type: "error", text: "Failed to save" });
               })
             }
             className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"

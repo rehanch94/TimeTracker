@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminAuth";
-import { getWeekStartDay, getSchedules, getTimezone } from "./actions";
+import { getWeekStartDay, getSchedules, getTimezone, getEmailReportTo, getEmailReportBody } from "./actions";
 import { getWeekBoundsUtc, getLocalDayOfWeek } from "@/lib/week";
 import AdminClient from "./AdminClient";
 
@@ -11,8 +11,15 @@ export default async function AdminPage() {
 
   let weekStartDay = 0;
   let displayTimezone: string | null = null;
+  let emailReportTo = "";
+  let emailReportBody = "";
   try {
-    [weekStartDay, displayTimezone] = await Promise.all([getWeekStartDay(), getTimezone()]);
+    [weekStartDay, displayTimezone, emailReportTo, emailReportBody] = await Promise.all([
+      getWeekStartDay(),
+      getTimezone(),
+      getEmailReportTo(),
+      getEmailReportBody(),
+    ]);
   } catch {
     weekStartDay = 0;
   }
@@ -37,7 +44,7 @@ export default async function AdminPage() {
     const result = await Promise.all([
       prisma.user.findMany({
         orderBy: [{ role: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, role: true, is_active: true, pin_code: true, createdAt: true, updatedAt: true },
+        select: { id: true, name: true, role: true, is_active: true, pin_code: true, hourly_pay: true, createdAt: true, updatedAt: true },
       }),
       prisma.timeEntry.findMany({
         orderBy: { clock_in_time: "desc" },
@@ -87,19 +94,105 @@ export default async function AdminPage() {
     weekEntries = result[3];
   } catch (err) {
     console.error("Admin page data load failed:", err);
-    return (
-      <main className="min-h-screen p-6 bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold text-slate-800">Admin Console</h1>
-          <p className="mt-2 text-red-600">
-            Failed to load data. Check the server console for details.
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            If you just added the Setting table, run: npx prisma db push
-          </p>
-        </div>
-      </main>
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    const isHourlyPayMissing =
+      /column.*does not exist|Unknown column/i.test(message) || message.includes("hourly_pay");
+
+    // If production DB hasn't been migrated yet, still let admin load (hourly pay will show as unset).
+    if (isHourlyPayMissing) {
+      try {
+        const [usersRaw, entriesFallback, auditsFallback, weekEntriesFallback] = await Promise.all([
+          prisma.$queryRaw<
+            Array<{
+              id: string;
+              name: string;
+              role: string;
+              pin_code: string;
+              is_active: boolean;
+              createdAt: Date;
+              updatedAt: Date;
+            }>
+          >`SELECT id, name, role, pin_code, is_active, "createdAt", "updatedAt" FROM "User" ORDER BY role ASC, name ASC`,
+          prisma.timeEntry.findMany({
+            orderBy: { clock_in_time: "desc" },
+            take: 500,
+            select: {
+              id: true,
+              user_id: true,
+              clock_in_time: true,
+              clock_out_time: true,
+              total_hours: true,
+              is_edited: true,
+              user: { select: { id: true, name: true } },
+            },
+          }),
+          prisma.auditLog.findMany({
+            orderBy: { edited_at: "desc" },
+            take: 500,
+            select: {
+              id: true,
+              time_entry_id: true,
+              edited_by_user_id: true,
+              edited_at: true,
+              previous_clock_in: true,
+              previous_clock_out: true,
+              edited_by_user: { select: { id: true, name: true } },
+            },
+          }),
+          prisma.timeEntry.findMany({
+            where: {
+              clock_in_time: { gte: weekStart, lt: weekEnd },
+              clock_out_time: { not: null },
+            },
+            select: {
+              id: true,
+              user_id: true,
+              clock_in_time: true,
+              clock_out_time: true,
+              total_hours: true,
+              is_edited: true,
+              user: { select: { id: true, name: true } },
+            },
+          }),
+        ]);
+
+        users = usersRaw.map((u) => ({ ...u, hourly_pay: null }));
+        entries = entriesFallback;
+        audits = auditsFallback;
+        weekEntries = weekEntriesFallback;
+      } catch (fallbackErr) {
+        console.error("Admin fallback load failed:", fallbackErr);
+        const fallbackMessage =
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        return (
+          <main className="min-h-screen p-6 bg-slate-50 flex items-center justify-center">
+            <div className="text-center max-w-lg">
+              <h1 className="text-xl font-semibold text-slate-800">Admin Console</h1>
+              <p className="mt-2 text-red-600">Failed to load data.</p>
+              <pre className="mt-3 rounded-lg bg-slate-100 p-3 text-left text-xs text-slate-700 overflow-auto max-h-48">
+                {fallbackMessage}
+              </pre>
+              <p className="mt-3 text-sm text-slate-500">
+                If you just added hourly pay, run:{" "}
+                <code className="rounded bg-slate-200 px-1">npx prisma db push</code>
+              </p>
+            </div>
+          </main>
+        );
+      }
+    } else {
+      return (
+        <main className="min-h-screen p-6 bg-slate-50 flex items-center justify-center">
+          <div className="text-center max-w-lg">
+            <h1 className="text-xl font-semibold text-slate-800">Admin Console</h1>
+            <p className="mt-2 text-red-600">Failed to load data.</p>
+            <pre className="mt-3 rounded-lg bg-slate-100 p-3 text-left text-xs text-slate-700 overflow-auto max-h-48">
+              {message}
+            </pre>
+          </div>
+        </main>
+      );
+    }
   }
 
   let schedules: { userId: string; userName: string; byDay: number[] }[] = [];
@@ -131,6 +224,9 @@ export default async function AdminPage() {
     }
   }
   const scheduleByUser = new Map(schedules.map((s) => [s.userId, s]));
+  const hourlyPayByUser = new Map(
+    users.filter((u) => u.hourly_pay != null).map((u) => [u.id, u.hourly_pay as number])
+  );
   const allUserIds = new Set([
     ...Array.from(weeklyTotalsMap.keys()),
     ...schedules.map((s) => s.userId),
@@ -145,6 +241,8 @@ export default async function AdminPage() {
       const scheduledByDay = Array.from({ length: 7 }, (_, i) => byDay[(weekStartDay + i) % 7]);
       const scheduledTotal = scheduledByDay.reduce((a, b) => a + b, 0);
       const actualByDay = actualByDayMap.get(userId) ?? [0, 0, 0, 0, 0, 0, 0];
+      const hourlyPay = hourlyPayByUser.get(userId) ?? null;
+      const totalCost = hourlyPay != null ? totalHours * hourlyPay : null;
       return {
         userId,
         userName,
@@ -152,9 +250,25 @@ export default async function AdminPage() {
         scheduledTotal,
         actualByDay,
         scheduledByDay,
+        hourlyPay,
+        totalCost,
       };
     })
     .sort((a, b) => a.userName.localeCompare(b.userName));
+
+  const weekEntriesSerialized = weekEntries
+    .sort((a, b) => b.clock_in_time.getTime() - a.clock_in_time.getTime())
+    .map((e) => {
+      const u = users.find((u) => u.id === e.user_id);
+      return {
+        id: e.id,
+        user: { id: e.user_id, name: u?.name ?? "—" },
+        clock_in_time: e.clock_in_time.toISOString(),
+        clock_out_time: e.clock_out_time ? e.clock_out_time.toISOString() : null,
+        total_hours: e.total_hours,
+        is_edited: e.is_edited,
+      };
+    });
 
   return (
     <AdminClient
@@ -165,6 +279,9 @@ export default async function AdminPage() {
       weeklyTotals={weeklyTotals}
       weekStartIso={weekStart.toISOString()}
       weekEndIso={weekEnd.toISOString()}
+      weekEntries={weekEntriesSerialized}
+      emailReportTo={emailReportTo}
+      emailReportBody={emailReportBody}
       entries={entries.map((e) => {
         const u = users.find((u) => u.id === e.user_id);
         return {
