@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/adminAuth";
-import { getWeekStartDay, getSchedules } from "./actions";
-import { getWeekBoundsUtc } from "@/lib/week";
+import { getWeekStartDay, getSchedules, getTimezone } from "./actions";
+import { getWeekBoundsUtc, getLocalDayOfWeek } from "@/lib/week";
 import AdminClient from "./AdminClient";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +10,13 @@ export default async function AdminPage() {
   const admin = await requireAdmin();
 
   let weekStartDay = 0;
+  let displayTimezone: string | null = null;
   try {
-    weekStartDay = await getWeekStartDay();
+    [weekStartDay, displayTimezone] = await Promise.all([getWeekStartDay(), getTimezone()]);
   } catch {
     weekStartDay = 0;
   }
+  const tz = displayTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const { start: weekStart, end: weekEnd } = getWeekBoundsUtc(weekStartDay);
 
@@ -107,8 +109,6 @@ export default async function AdminPage() {
     // optional: show totals without schedule highlighting
   }
 
-  const weekStartMs = weekStart.getTime();
-  const msPerDay = 86400000;
   const actualByDayMap = new Map<string, number[]>();
   const weeklyTotalsMap = new Map<string, { userName: string; totalHours: number }>();
   for (const e of weekEntries) {
@@ -119,7 +119,8 @@ export default async function AdminPage() {
     } else {
       weeklyTotalsMap.set(e.user_id, { userName: e.user.name, totalHours: hours });
     }
-    const dayIndex = Math.floor((e.clock_in_time.getTime() - weekStartMs) / msPerDay);
+    const localDayOfWeek = getLocalDayOfWeek(e.clock_in_time, tz);
+    const dayIndex = (localDayOfWeek - weekStartDay + 7) % 7;
     if (dayIndex >= 0 && dayIndex < 7) {
       let arr = actualByDayMap.get(e.user_id);
       if (!arr) {

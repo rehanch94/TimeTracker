@@ -88,6 +88,17 @@ export async function updateDatabaseSql() {
 }
 
 const WEEK_START_KEY = "week_start_day";
+const TIMEZONE_KEY = "timezone";
+
+/** IANA timezone (e.g. America/Los_Angeles) for week-day bucketing; null = use server TZ */
+export async function getTimezone(): Promise<string | null> {
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: TIMEZONE_KEY } });
+    return row?.value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 /** 0 = Sunday, 1 = Monday, ... 6 = Saturday */
 export async function getWeekStartDay(): Promise<number> {
@@ -109,6 +120,23 @@ export async function setWeekStartDay(day: number) {
     create: { key: WEEK_START_KEY, value: String(day) },
     update: { value: String(day) },
   });
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  return { success: true, error: null };
+}
+
+export async function setTimezone(value: string) {
+  await requireAdmin();
+  const tz = value?.trim() || "";
+  if (!tz) {
+    await prisma.setting.deleteMany({ where: { key: TIMEZONE_KEY } }).catch(() => {});
+  } else {
+    await prisma.setting.upsert({
+      where: { key: TIMEZONE_KEY },
+      create: { key: TIMEZONE_KEY, value: tz },
+      update: { value: tz },
+    });
+  }
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   return { success: true, error: null };

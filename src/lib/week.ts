@@ -15,4 +15,18 @@ export function getWeekBoundsUtc(weekStartDay: number): { start: Date; end: Date
   return { start, end };
 }
 
+/**
+ * Day of week (0 = Sunday .. 6 = Saturday) for a date in the given timezone.
+ * Uses server timezone if tz is not provided.
+ */
+export function getLocalDayOfWeek(date: Date, tz?: string): number {
+  if (!tz) {
+    return date.getDay();
+  }
+  const formatter = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" });
+  const weekday = formatter.format(date);
+  const idx = WEEKDAY_NAMES.indexOf(weekday);
+  return idx >= 0 ? idx : date.getUTCDay();
+}
+
 export const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

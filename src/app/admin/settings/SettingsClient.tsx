@@ -3,26 +3,39 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { setWeekStartDay, setSchedules } from "../actions";
+import { setWeekStartDay, setSchedules, setTimezone } from "../actions";
 
 type ScheduleRow = { userId: string; userName: string; byDay: number[] };
 
 const DEFAULT_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const TIMEZONE_OPTIONS = [
+  { value: "", label: "Server default" },
+  { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
+  { value: "America/Denver", label: "Mountain (Denver)" },
+  { value: "America/Chicago", label: "Central (Chicago)" },
+  { value: "America/New_York", label: "Eastern (New York)" },
+  { value: "UTC", label: "UTC" },
+];
 
 export default function SettingsClient({
   weekStartDay = 0,
   weekDayOptions = [],
   schedules = [],
   dayLabels = DEFAULT_DAY_LABELS,
+  timezone = "",
 }: {
   weekStartDay: number;
   weekDayOptions: { value: number; label: string }[];
   schedules: ScheduleRow[];
   dayLabels: string[];
+  timezone?: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState(weekStartDay);
+  const [tz, setTz] = useState(timezone);
   useEffect(() => setSelected(weekStartDay), [weekStartDay]);
+  useEffect(() => setTz(timezone), [timezone]);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -106,6 +119,43 @@ export default function SettingsClient({
                 const res = await setWeekStartDay(selected);
                 if (res.success) {
                   setMsg({ type: "success", text: "Saved." });
+                  router.refresh();
+                } else setMsg({ type: "error", text: res.error ?? "Failed" });
+              })
+            }
+            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            Save
+          </button>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-800">Timezone</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Used to assign hours to the correct week day (e.g. Thursday vs Friday). Set this if &quot;This week&quot; days are wrong (e.g. on Vercel use Pacific or your zone).
+          </p>
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-slate-600">Display timezone</label>
+            <select
+              value={tz}
+              onChange={(e) => setTz(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            >
+              {TIMEZONE_OPTIONS.map((opt) => (
+                <option key={opt.value || "default"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            disabled={isPending || tz === timezone}
+            onClick={() =>
+              startTransition(async () => {
+                setMsg(null);
+                const res = await setTimezone(tz);
+                if (res.success) {
+                  setMsg({ type: "success", text: "Timezone saved." });
                   router.refresh();
                 } else setMsg({ type: "error", text: res.error ?? "Failed" });
               })

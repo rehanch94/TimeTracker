@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/adminAuth";
 import { prisma } from "@/lib/prisma";
-import { getWeekStartDay, getSchedules } from "../actions";
+import { getWeekStartDay, getSchedules, getTimezone } from "../actions";
 import { WEEKDAY_NAMES } from "@/lib/week";
 import SettingsClient from "./SettingsClient";
 
@@ -17,10 +17,14 @@ export default async function AdminSettingsPage() {
   });
 
   let weekStartDay = 0;
+  let timezone: string | null = null;
   let scheduleData: { userId: string; userName: string; byDay: number[] }[] = [];
   try {
-    weekStartDay = await getWeekStartDay();
-    scheduleData = await getSchedules();
+    [weekStartDay, timezone, scheduleData] = await Promise.all([
+      getWeekStartDay(),
+      getTimezone(),
+      getSchedules(),
+    ]);
   } catch (err) {
     console.error("Settings page data load failed:", err);
   }
@@ -41,6 +45,7 @@ export default async function AdminSettingsPage() {
       weekDayOptions={WEEKDAY_NAMES.map((name, i) => ({ value: i, label: name }))}
       schedules={schedules}
       dayLabels={WEEKDAY_NAMES.map((n) => n.slice(0, 3))}
+      timezone={timezone ?? ""}
     />
   );
 }
