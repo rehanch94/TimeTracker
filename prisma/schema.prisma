@@ -1,0 +1,76 @@
+// Prisma schema for time-tracking app
+// All timestamps are stored in UTC in the database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  // SQLite doesn't support Prisma enums; store as string ("ADMIN" | "EMPLOYEE")
+  role      String     @default("EMPLOYEE")
+  pin_code  String     // For clock in/out; multiple employees may share a PIN
+  is_active Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  timeEntries TimeEntry[]
+  auditLogs   AuditLog[] @relation("EditedByUser")
+  schedules   Schedule[]
+
+  @@index([role])
+  @@index([is_active])
+}
+
+model Schedule {
+  id          String @id @default(cuid())
+  user_id     String
+  day_of_week Int    // 0 = Sunday, 6 = Saturday
+  hours       Float  @default(0)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, day_of_week])
+  @@index([user_id])
+}
+
+model TimeEntry {
+  id            String    @id @default(cuid())
+  user_id       String
+  clock_in_time DateTime  // Stored in UTC
+  clock_out_time DateTime? // Stored in UTC; null = active shift
+  total_hours   Float?    // Calculated on backend when clock_out is set
+  is_edited     Boolean   @default(false)
+
+  user     User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+
+  @@index([user_id])
+  @@index([user_id, clock_out_time])
+}
+
+model AuditLog {
+  id                 String   @id @default(cuid())
+  time_entry_id      String
+  edited_by_user_id  String
+  edited_at          DateTime // Stored in UTC
+  previous_clock_in  DateTime
+  previous_clock_out DateTime?
+
+  time_entry    TimeEntry @relation(fields: [time_entry_id], references: [id], onDelete: Cascade)
+  edited_by_user User     @relation("EditedByUser", fields: [edited_by_user_id], references: [id], onDelete: Cascade)
+
+  @@index([time_entry_id])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
