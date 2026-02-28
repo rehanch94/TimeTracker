@@ -103,6 +103,7 @@ export default function AdminClient({
   const [isPending, startTransition] = useTransition();
   const [newEmployeeName, setNewEmployeeName] = useState("");
   const [newEmployeePin, setNewEmployeePin] = useState("");
+  const [newEmployeeHourlyPay, setNewEmployeeHourlyPay] = useState("");
 
   const [showInactive, setShowInactive] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<UserRow | null>(null);
@@ -481,7 +482,7 @@ export default function AdminClient({
                                 disabled={isPending}
                                 onClick={() =>
                                   startTransition(async () => {
-                                    if (!confirm("Delete this time entry?")) return;
+                                    if (!confirm("Are you sure you want to delete this time entry? This cannot be undone.")) return;
                                     setMsg(null);
                                     const res = await deleteTimeEntry(e.id);
                                     if (res.success) {
@@ -543,6 +544,18 @@ export default function AdminClient({
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-500"
                 />
               </div>
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-medium text-slate-600">Hourly pay ($)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="Optional"
+                  value={newEmployeeHourlyPay}
+                  onChange={(e) => setNewEmployeeHourlyPay(e.target.value)}
+                  className="mt-1 w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                />
+              </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <p className="text-xs text-slate-500">PINs can be shared by multiple employees.</p>
@@ -551,11 +564,17 @@ export default function AdminClient({
                 onClick={() =>
                   startTransition(async () => {
                     setMsg(null);
-                    const res = await createEmployee(newEmployeeName, newEmployeePin);
+                    const raw = newEmployeeHourlyPay.trim();
+                    const hourlyPayParam = raw === "" ? undefined : (() => {
+                      const n = Number(raw);
+                      return Number.isFinite(n) && n >= 0 ? n : undefined;
+                    })();
+                    const res = await createEmployee(newEmployeeName, newEmployeePin, hourlyPayParam);
                     if (res.success) {
                       setMsg({ type: "success", text: "Employee added." });
                       setNewEmployeeName("");
                       setNewEmployeePin("");
+                      setNewEmployeeHourlyPay("");
                       router.refresh();
                     } else {
                       setMsg({ type: "error", text: res.error ?? "Failed to add employee." });
@@ -596,7 +615,7 @@ export default function AdminClient({
                         disabled={isPending}
                         onClick={() =>
                           startTransition(async () => {
-                            if (!confirm(`Remove ${u.name}? Their time entries and schedule will be deleted.`)) return;
+                            if (!confirm(`Remove ${u.name}? This will delete the employee and all their time entries and schedule. This cannot be undone.\n\nDo you want to continue?`)) return;
                             setMsg(null);
                             const res = await deleteEmployee(u.id);
                             if (res.success) {
@@ -669,7 +688,7 @@ export default function AdminClient({
                               disabled={isPending}
                               onClick={() =>
                                 startTransition(async () => {
-                                  if (!confirm(`Remove ${u.name}? Their time entries and schedule will be deleted.`)) return;
+                                  if (!confirm(`Remove ${u.name}? This will delete the employee and all their time entries and schedule. This cannot be undone.\n\nDo you want to continue?`)) return;
                                   setMsg(null);
                                   const res = await deleteEmployee(u.id);
                                   if (res.success) {
@@ -897,7 +916,7 @@ export default function AdminClient({
                           disabled={isPending}
                           onClick={() =>
                             startTransition(async () => {
-                              if (!confirm("Delete this time entry?")) return;
+                              if (!confirm("Are you sure you want to delete this time entry? This cannot be undone.")) return;
                               setMsg(null);
                               const res = await deleteTimeEntry(e.id);
                               if (res.success) {

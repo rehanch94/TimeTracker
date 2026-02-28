@@ -39,13 +39,26 @@ export async function toggleUserActive(userId: string) {
   return { success: true, error: null };
 }
 
-export async function createEmployee(name: string, pinCode: string) {
+export async function createEmployee(
+  name: string,
+  pinCode: string,
+  hourlyPay?: number | null | string
+) {
   await requireAdmin();
 
   const trimmedName = name.trim();
   const trimmedPin = pinCode.trim();
   if (!trimmedName) return { success: false, error: "Name is required" };
   if (!/^\d{4,8}$/.test(trimmedPin)) return { success: false, error: "PIN must be 4-8 digits" };
+  const hasHourlyPay = hourlyPay !== undefined && hourlyPay !== null && hourlyPay !== "";
+  if (hasHourlyPay) {
+    const n = Number(hourlyPay);
+    if (n < 0 || !Number.isFinite(n)) return { success: false, error: "Hourly pay must be a non-negative number" };
+  }
+
+  const hourlyPayValue = hourlyPay === undefined || hourlyPay === null || hourlyPay === ""
+    ? null
+    : Number(hourlyPay);
 
   await prisma.user.create({
     data: {
@@ -53,6 +66,7 @@ export async function createEmployee(name: string, pinCode: string) {
       role: "EMPLOYEE",
       pin_code: trimmedPin,
       is_active: true,
+      hourly_pay: hourlyPayValue,
     },
   });
 
