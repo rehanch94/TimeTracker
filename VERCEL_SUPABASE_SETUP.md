@@ -7,7 +7,11 @@ Use this when the app is deployed on **Vercel** with **Supabase** as the databas
 ## 1. Connect Vercel to Supabase
 
 - In **Vercel**: link the project to your **Supabase** project (e.g. Integrations → Supabase, or connect when creating the project).
-- The integration provides the database URL. The app uses it via `SUPABASE_DATABASE_URL` when set (see `src/lib/prisma.ts`). You do not need to add `DATABASE_URL` manually if the integration is connected.
+- The integration provides **`POSTGRES_URL`** (and `SUPABASE_URL`). The app maps `POSTGRES_URL` → `DATABASE_URL` in `src/lib/prisma.ts`, so you do not need to add `DATABASE_URL` manually.
+
+**If you still see "connection failed":**
+- **Redeploy:** Deployments → … next to latest deployment → **Redeploy**. Uncheck **"Redeploy with existing Build Cache"** so the new env vars are picked up.
+- **Supabase network:** If Supabase has **Network Restrictions** or an IP allow list (Settings → Database), Vercel’s IPs may be blocked. Temporarily disable restrictions to test.
 
 ---
 
