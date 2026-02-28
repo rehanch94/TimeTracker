@@ -129,6 +129,14 @@ export async function deleteEmployee(userId: string) {
   return { success: true, error: null };
 }
 
+/** Delete a single time entry (admin only). */
+export async function deleteTimeEntry(entryId: string) {
+  await requireAdmin();
+  await prisma.timeEntry.delete({ where: { id: entryId } });
+  revalidatePath("/admin");
+  return { success: true, error: null };
+}
+
 /** Updates exports/timetracking.sql with current DB state (SQLite only). No-op on Supabase/Postgres. */
 export async function updateDatabaseSql() {
   await requireAdmin();

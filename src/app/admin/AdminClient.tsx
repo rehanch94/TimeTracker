@@ -3,8 +3,15 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createEmployee, updateDatabaseSql, toggleUserActive, updateUserPin, updateEmployee, deleteEmployee, adminLogout } from "./actions";
+import { createEmployee, updateDatabaseSql, toggleUserActive, updateEmployee, deleteEmployee, deleteTimeEntry, adminLogout } from "./actions";
 import { editTimeEntry } from "@/app/actions/clock";
+
+const PencilIcon = ({ className }: { className?: string }) => (
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+);
+const TrashIcon = ({ className }: { className?: string }) => (
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+);
 
 type UserRow = { id: string; name: string; role: string; is_active: boolean; pin_code: string; hourly_pay?: number | null };
 type WeeklyTotal = {
@@ -98,8 +105,6 @@ export default function AdminClient({
   const [newEmployeePin, setNewEmployeePin] = useState("");
 
   const [showInactive, setShowInactive] = useState(false);
-  const [editingPinForId, setEditingPinForId] = useState<string | null>(null);
-  const [editPinValue, setEditPinValue] = useState("");
   const [editingEmployee, setEditingEmployee] = useState<UserRow | null>(null);
   const [editEmployeeName, setEditEmployeeName] = useState("");
   const [editEmployeePin, setEditEmployeePin] = useState("");
@@ -428,31 +433,76 @@ export default function AdminClient({
                     <th className="py-2 pr-4 font-medium">Clock in</th>
                     <th className="py-2 pr-4 font-medium">Clock out</th>
                     <th className="py-2 pr-4 font-medium">Hours</th>
+                    <th className="py-2 pr-4 font-medium">Cost</th>
                     <th className="py-2 pr-4 font-medium">Edited</th>
+                    <th className="py-2 pr-2 font-medium w-20"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {(weekEntries ?? [])
-                    .map((e) => (
-                      <tr key={e.id} className="text-slate-800">
-                        <td className="py-2 pr-4 whitespace-nowrap">{e.user.name}</td>
-                        <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_in_time)}</td>
-                        <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_out_time)}</td>
-                        <td className="py-2 pr-4 whitespace-nowrap tabular-nums">
-                          {e.total_hours == null ? "—" : e.total_hours.toFixed(2)}
-                        </td>
-                        <td className="py-2 pr-4 whitespace-nowrap">
-                          {e.is_edited ? (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 text-xs">Edited</span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    .map((e) => {
+                      const hourlyPay = users.find((u) => u.id === e.user.id)?.hourly_pay ?? null;
+                      const cost = e.total_hours != null && hourlyPay != null ? e.total_hours * hourlyPay : null;
+                      return (
+                        <tr key={e.id} className="text-slate-800">
+                          <td className="py-2 pr-4 whitespace-nowrap">{e.user.name}</td>
+                          <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_in_time)}</td>
+                          <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_out_time)}</td>
+                          <td className="py-2 pr-4 whitespace-nowrap tabular-nums">
+                            {e.total_hours == null ? "—" : e.total_hours.toFixed(2)}
+                          </td>
+                          <td className="py-2 pr-4 whitespace-nowrap tabular-nums text-slate-700">
+                            {cost != null ? `$${cost.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="py-2 pr-4 whitespace-nowrap">
+                            {e.is_edited ? (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 text-xs">Edited</span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="py-2 pr-2 whitespace-nowrap">
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingEntry(e);
+                                  setEditClockIn(toLocalDatetimeInput(e.clock_in_time));
+                                  setEditClockOut(e.clock_out_time ? toLocalDatetimeInput(e.clock_out_time) : "");
+                                }}
+                                disabled={isPending}
+                                className="rounded p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+                                title="Edit"
+                              >
+                                <PencilIcon />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() =>
+                                  startTransition(async () => {
+                                    if (!confirm("Delete this time entry?")) return;
+                                    setMsg(null);
+                                    const res = await deleteTimeEntry(e.id);
+                                    if (res.success) {
+                                      setMsg({ type: "success", text: "Entry deleted." });
+                                      router.refresh();
+                                    } else setMsg({ type: "error", text: "Failed to delete." });
+                                  })
+                                }
+                                className="rounded p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-50"
+                                title="Delete"
+                              >
+                                <TrashIcon />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   {(weekEntries ?? []).length === 0 && (
                     <tr>
-                      <td className="py-4 text-slate-500" colSpan={5}>
+                      <td className="py-4 text-slate-500" colSpan={7}>
                         No time entries this week yet.
                       </td>
                     </tr>
@@ -525,58 +575,8 @@ export default function AdminClient({
               {activeEmployees.map((u) => (
                 <div key={u.id} className="py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <p className="font-medium text-slate-800">{u.name}</p>
-                      {editingPinForId === u.id ? (
-                        <span className="flex items-center gap-1.5">
-                          <input
-                            type="password"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={editPinValue}
-                            onChange={(e) => setEditPinValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                            placeholder="New PIN"
-                            className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
-                          />
-                          <button
-                            disabled={isPending || editPinValue.length < 4}
-                            onClick={() =>
-                              startTransition(async () => {
-                                setMsg(null);
-                                const res = await updateUserPin(u.id, editPinValue);
-                                if (res.success) {
-                                  setEditingPinForId(null);
-                                  setEditPinValue("");
-                                  router.refresh();
-                                } else setMsg({ type: "error", text: res.error ?? "Failed" });
-                              })
-                            }
-                            className="rounded bg-slate-800 px-2 py-1 text-xs text-white hover:bg-slate-700 disabled:opacity-50"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setEditingPinForId(null); setEditPinValue(""); }}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                          >
-                            Cancel
-                          </button>
-                        </span>
-                      ) : (
-                        <>
-                          <span className="text-sm text-slate-500 font-mono">PIN: {u.pin_code}</span>
-                          <button
-                            type="button"
-                            onClick={() => { setEditingPinForId(u.id); setEditPinValue(u.pin_code); }}
-                            className="text-xs text-slate-500 hover:text-slate-700 underline"
-                          >
-                            Edit PIN
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
+                    <p className="font-medium text-slate-800 min-w-0">{u.name}</p>
+                    <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -586,9 +586,10 @@ export default function AdminClient({
                           setEditEmployeeHourlyPay(u.hourly_pay != null ? String(u.hourly_pay) : "");
                         }}
                         disabled={isPending}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        className="rounded p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+                        title="Edit"
                       >
-                        Edit
+                        <PencilIcon />
                       </button>
                       <button
                         type="button"
@@ -604,26 +605,25 @@ export default function AdminClient({
                             } else setMsg({ type: "error", text: res.error ?? "Failed to remove." });
                           })
                         }
-                        className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                        className="rounded p-2 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-50"
+                        title="Remove"
                       >
-                        Remove
+                        <TrashIcon />
                       </button>
-                      {editingPinForId !== u.id && (
-                        <button
-                          disabled={isPending}
-                          onClick={() =>
-                            startTransition(async () => {
-                              setMsg(null);
-                              const res = await toggleUserActive(u.id);
-                              if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
-                              else router.refresh();
-                            })
-                          }
-                          className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none"
-                        >
-                          Disable
-                        </button>
-                      )}
+                      <button
+                        disabled={isPending}
+                        onClick={() =>
+                          startTransition(async () => {
+                            setMsg(null);
+                            const res = await toggleUserActive(u.id);
+                            if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
+                            else router.refresh();
+                          })
+                        }
+                        className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50 disabled:pointer-events-none"
+                      >
+                        Disable
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -648,58 +648,8 @@ export default function AdminClient({
                     {inactiveEmployees.map((u) => (
                       <div key={u.id} className="px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <p className="text-sm text-slate-700">{u.name}</p>
-                            {editingPinForId === u.id ? (
-                              <span className="flex items-center gap-1.5">
-                                <input
-                                  type="password"
-                                  inputMode="numeric"
-                                  autoComplete="off"
-                                  value={editPinValue}
-                                  onChange={(e) => setEditPinValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                                  placeholder="New PIN"
-                                  className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
-                                />
-                                <button
-                                  disabled={isPending || editPinValue.length < 4}
-                                  onClick={() =>
-                                    startTransition(async () => {
-                                      setMsg(null);
-                                      const res = await updateUserPin(u.id, editPinValue);
-                                      if (res.success) {
-                                        setEditingPinForId(null);
-                                        setEditPinValue("");
-                                        router.refresh();
-                                      } else setMsg({ type: "error", text: res.error ?? "Failed" });
-                                    })
-                                  }
-                                  className="rounded bg-slate-800 px-2 py-1 text-xs text-white hover:bg-slate-700 disabled:opacity-50"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => { setEditingPinForId(null); setEditPinValue(""); }}
-                                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                                >
-                                  Cancel
-                                </button>
-                              </span>
-                            ) : (
-                              <>
-                                <span className="text-sm text-slate-500 font-mono">PIN: {u.pin_code}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => { setEditingPinForId(u.id); setEditPinValue(u.pin_code); }}
-                                  className="text-xs text-slate-500 hover:text-slate-700 underline"
-                                >
-                                  Edit PIN
-                                </button>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
+                          <p className="text-sm text-slate-700 min-w-0">{u.name}</p>
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => {
@@ -709,9 +659,10 @@ export default function AdminClient({
                                 setEditEmployeeHourlyPay(u.hourly_pay != null ? String(u.hourly_pay) : "");
                               }}
                               disabled={isPending}
-                              className="rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                              className="rounded p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+                              title="Edit"
                             >
-                              Edit
+                              <PencilIcon />
                             </button>
                             <button
                               type="button"
@@ -727,26 +678,25 @@ export default function AdminClient({
                                   } else setMsg({ type: "error", text: res.error ?? "Failed to remove." });
                                 })
                               }
-                              className="rounded border border-rose-300 bg-white px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                              className="rounded p-2 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-50"
+                              title="Remove"
                             >
-                              Remove
+                              <TrashIcon />
                             </button>
-                            {editingPinForId !== u.id && (
-                              <button
-                                disabled={isPending}
-                                onClick={() =>
-                                  startTransition(async () => {
-                                    setMsg(null);
-                                    const res = await toggleUserActive(u.id);
-                                    if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
-                                    else router.refresh();
-                                  })
-                                }
-                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none"
-                              >
-                                Enable
-                              </button>
-                            )}
+                            <button
+                              disabled={isPending}
+                              onClick={() =>
+                                startTransition(async () => {
+                                  setMsg(null);
+                                  const res = await toggleUserActive(u.id);
+                                  if (!res.success) setMsg({ type: "error", text: res.error ?? "Update failed" });
+                                  else router.refresh();
+                                })
+                              }
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none"
+                            >
+                              Enable
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -898,18 +848,25 @@ export default function AdminClient({
                   <th className="py-2 pr-4 font-medium">Clock in</th>
                   <th className="py-2 pr-4 font-medium">Clock out</th>
                   <th className="py-2 pr-4 font-medium">Hours</th>
+                  <th className="py-2 pr-4 font-medium">Cost</th>
                   <th className="py-2 pr-4 font-medium">Edited</th>
-                  <th className="py-2 pr-4 font-medium w-20"></th>
+                  <th className="py-2 pr-2 font-medium w-20"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredEntries.map((e) => (
+                {filteredEntries.map((e) => {
+                  const hourlyPay = users.find((u) => u.id === e.user.id)?.hourly_pay ?? null;
+                  const cost = e.total_hours != null && hourlyPay != null ? e.total_hours * hourlyPay : null;
+                  return (
                   <tr key={e.id} className="text-slate-800">
                     <td className="py-2 pr-4 whitespace-nowrap">{e.user.name}</td>
                     <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_in_time)}</td>
                     <td className="py-2 pr-4 whitespace-nowrap">{fmtLocal(e.clock_out_time)}</td>
-                    <td className="py-2 pr-4 whitespace-nowrap">
+                    <td className="py-2 pr-4 whitespace-nowrap tabular-nums">
                       {e.total_hours == null ? "—" : e.total_hours.toFixed(2)}
+                    </td>
+                    <td className="py-2 pr-4 whitespace-nowrap tabular-nums text-slate-700">
+                      {cost != null ? `$${cost.toFixed(2)}` : "—"}
                     </td>
                     <td className="py-2 pr-4 whitespace-nowrap">
                       {e.is_edited ? (
@@ -920,25 +877,48 @@ export default function AdminClient({
                         "No"
                       )}
                     </td>
-                    <td className="py-2 pr-4 whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingEntry(e);
-                          setEditClockIn(toLocalDatetimeInput(e.clock_in_time));
-                          setEditClockOut(e.clock_out_time ? toLocalDatetimeInput(e.clock_out_time) : "");
-                        }}
-                        disabled={isPending}
-                        className="text-sm font-medium text-slate-600 hover:text-slate-800 underline disabled:opacity-50"
-                      >
-                        Edit
-                      </button>
+                    <td className="py-2 pr-2 whitespace-nowrap">
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingEntry(e);
+                            setEditClockIn(toLocalDatetimeInput(e.clock_in_time));
+                            setEditClockOut(e.clock_out_time ? toLocalDatetimeInput(e.clock_out_time) : "");
+                          }}
+                          disabled={isPending}
+                          className="rounded p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+                          title="Edit"
+                        >
+                          <PencilIcon />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              if (!confirm("Delete this time entry?")) return;
+                              setMsg(null);
+                              const res = await deleteTimeEntry(e.id);
+                              if (res.success) {
+                                setMsg({ type: "success", text: "Entry deleted." });
+                                router.refresh();
+                              } else setMsg({ type: "error", text: "Failed to delete." });
+                            })
+                          }
+                          className="rounded p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-50"
+                          title="Delete"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filteredEntries.length === 0 && (
                   <tr>
-                    <td className="py-4 text-slate-500" colSpan={6}>
+                    <td className="py-4 text-slate-500" colSpan={7}>
                       No entries.
                     </td>
                   </tr>
