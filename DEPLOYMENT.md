@@ -6,7 +6,9 @@ The app is set up to deploy on **Netlify** with **Supabase** as the database. Pu
 
 ## 1. Netlify environment variables
 
-In **Netlify Dashboard** → your site → **Site configuration** → **Environment variables**, add:
+**If you use Netlify’s Supabase integration:** The integration sets `SUPABASE_DATABASE_URL` (and other Supabase vars). The app uses that as the database URL when `DATABASE_URL` is not set, so you don’t need to set `DATABASE_URL` yourself.
+
+**Otherwise**, in **Netlify Dashboard** → your site → **Site configuration** → **Environment variables**, add:
 
 | Variable | Value | Scopes |
 |----------|--------|--------|
