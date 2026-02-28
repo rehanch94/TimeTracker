@@ -54,9 +54,9 @@ On the home page, **select your employee name first**, then **confirm with your 
   - View time-entry history + audit history
   - Export a local SQL dump file to `exports/` inside the project
 
-## Deploying (Netlify + Supabase)
+## Deploying (Vercel + Supabase)
 
-The app can run on **Netlify** with **Supabase** as the database. Set `DATABASE_URL` (and optionally `ADMIN_SESSION_SECRET`) in Netlify’s environment variables and push to your connected Git repo. See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for env vars and steps.
+Deploy on **Vercel** with **Supabase** as the database. See **[VERCEL_SUPABASE_SETUP.md](./VERCEL_SUPABASE_SETUP.md)** for setup steps.
 
 ## Scripts
 
